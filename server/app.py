@@ -16,6 +16,18 @@ client = CosmosClient(URL, credential=KEY)
 database = client.get_database_client(DATA_BASE_NAME)
 COSMOSDB_CONTAINER_CASES_CLEANED = database.get_container_client(CONTAINER_NAME_CLEANED)
 
+def get_cases_with_highest_version(cases):
+    unique_cases = {}
+    for case in cases:
+        # Can we assume every cases have its case number?
+        # Version is a string type. Will the version be assigned in lexicographic order?
+        cur_case = unique_cases.get(case.get('case_number'))
+        if cur_case == None or cur_case.get('version') == None or \
+            case.get('version') == None or case.get('version') > cur_case.get('version'):
+            unique_cases[case.get('case_number')] = case
+
+    return unique_cases
+
 @app.route('/cases', methods=['GET'])
 def get_cases():
     try: 
@@ -27,15 +39,8 @@ def get_cases():
             'message': f'{e.message}',
         }, 500)
     
-    unique_cases = {}
-    for case in cases:
-        # Can we assume every cases have its case number?
-        # Version is a string type. Will the version be assigned in lexicographic order?
-        cur_case = unique_cases.get(case.get('case_number'))
-        if cur_case == None or cur_case.get('version') == None or \
-            case.get('version') == None or case.get('version') > cur_case.get('version'):
-            unique_cases[case.get('case_number')] = case
-    return make_response(cases, 200)
+    unique_cases = get_cases_with_highest_version(cases)
+    return make_response(list(unique_cases.values()), 200)
 
 @app.route('/cases/<string:case_num>', methods=['GET'])
 def get_case(case_num):
@@ -48,7 +53,9 @@ def get_case(case_num):
             'status code': f'{e.status_code}',
             'message': f'{e.message}',
         }, 500)
-    return make_response(cases[0], 200)
+    
+    unique_cases = get_cases_with_highest_version(cases)
+    return make_response(unique_cases.get(case_num), 200)
 
 # http://localhost:5555/cases/period?startDate=2020-01-05&endDate=2021-01-04
 @app.route('/cases/period', methods=['GET'])
@@ -72,14 +79,7 @@ def get_cases_by_duration():
             'message': f'{e.message}',
         }, 500)
 
-    unique_cases = {}
-    for case in cases:
-        # Can we assume every cases have its case number?
-        # Version is a string type. Will the version be assigned in lexicographic order?
-        cur_case = unique_cases.get(case.get('case_number'))
-        if cur_case == None or cur_case.get('version') == None or \
-            case.get('version') == None or case.get('version') > cur_case.get('version'):
-            unique_cases[case.get('case_number')] = case
+    unique_cases = get_cases_with_highest_version(cases)
     return make_response(list(unique_cases.values()), 200)
 
 
