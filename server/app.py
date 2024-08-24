@@ -1,9 +1,17 @@
 from flask import Flask, make_response, jsonify, request
+from flask_restful import Api, Resource
+from flask_cors import CORS
 from azure.cosmos import CosmosClient, exceptions, PartitionKey
 from dotenv import load_dotenv
 import os
 
 app = Flask(__name__)
+
+# Instantiate REST API
+api = Api(app)
+
+# Instantiate CORS
+CORS(app)
 
 load_dotenv()
 
@@ -28,59 +36,67 @@ def get_cases_with_highest_version(cases):
 
     return unique_cases
 
-@app.route('/cases', methods=['GET'])
-def get_cases():
-    try: 
-        cases = list(COSMOSDB_CONTAINER_CASES_CLEANED.read_all_items())
-    except Exception as e:
-        print(f"Error querying cases-cleaned database: {e.status_code} - {e.message}")
-        return make_response({
-            'status code': f'{e.status_code}',
-            'message': f'{e.message}',
-        }, 500)
-    
-    unique_cases = get_cases_with_highest_version(cases)
-    return make_response(list(unique_cases.values()), 200)
+@app.route('/')
+def index():
+    return '<h1>Project Server</h1>'
 
-@app.route('/cases/<string:case_num>', methods=['GET'])
-def get_case(case_num):
-    try:
-        query = f"SELECT * FROM c WHERE c.case_number = '{case_num}'"
-        cases = list(COSMOSDB_CONTAINER_CASES_CLEANED.query_items(query=query,enable_cross_partition_query=True))
-    except Exception as e:
-        print(f"Error querying cases-cleaned database: {e.status_code} - {e.message}")
-        return make_response({
-            'status code': f'{e.status_code}',
-            'message': f'{e.message}',
-        }, 500)
-    
-    unique_cases = get_cases_with_highest_version(cases)
-    return make_response(unique_cases.get(case_num), 200)
+class Cases(Resource):
+    def get(self):
+        try: 
+            cases = list(COSMOSDB_CONTAINER_CASES_CLEANED.read_all_items())
+        except Exception as e:
+            print(f"Error querying cases-cleaned database: {e.status_code} - {e.message}")
+            return make_response({
+                'status code': f'{e.status_code}',
+                'message': f'{e.message}',
+            }, 500)
+        
+        unique_cases = get_cases_with_highest_version(cases)
+        return make_response(list(unique_cases.values()), 200)
 
-# http://localhost:5555/cases/period?startDate=2020-01-05&endDate=2021-01-04
-@app.route('/cases/period', methods=['GET'])
-def get_cases_by_duration():
-    start_date = request.args.get('startDate')
-    end_date = request.args.get('endDate')
-    print(f'start date: {start_date}, end date: {end_date}')
+class Case_by_case_num(Resource):
+    def get(self, case_num):
+        try:
+            query = f"SELECT * FROM c WHERE c.case_number = '{case_num}'"
+            cases = list(COSMOSDB_CONTAINER_CASES_CLEANED.query_items(query=query,enable_cross_partition_query=True))
+        except Exception as e:
+            print(f"Error querying cases-cleaned database: {e.status_code} - {e.message}")
+            return make_response({
+                'status code': f'{e.status_code}',
+                'message': f'{e.message}',
+            }, 500)
+        
+        unique_cases = get_cases_with_highest_version(cases)
+        return make_response(unique_cases.get(case_num), 200)
 
-    try: 
-        query = f"""
-            SELECT * 
-            FROM c 
-            WHERE c.earliest_charge_date >= '{start_date}' and c.earliest_charge_date <= '{end_date}'
-            ORDER BY c.earliest_charge_date ASC
-            """
-        cases = list(COSMOSDB_CONTAINER_CASES_CLEANED.query_items(query=query,enable_cross_partition_query=True))
-    except Exception as e:
-        print(f"Error querying cases-cleaned database: {e.status_code} - {e.message}")
-        return make_response({
-            'status code': f'{e.status_code}',
-            'message': f'{e.message}',
-        }, 500)
+# Fetch URL: http://localhost:5555/cases/period?startDate=2020-01-05&endDate=2021-01-04
+class Cases_by_period(Resource):
+    def get(self):
+        start_date = request.args.get('startDate')
+        end_date = request.args.get('endDate')
+        print(f'start date: {start_date}, end date: {end_date}')
 
-    unique_cases = get_cases_with_highest_version(cases)
-    return make_response(list(unique_cases.values()), 200)
+        try: 
+            query = f"""
+                SELECT * 
+                FROM c 
+                WHERE c.earliest_charge_date >= '{start_date}' and c.earliest_charge_date <= '{end_date}'
+                ORDER BY c.earliest_charge_date ASC
+                """
+            cases = list(COSMOSDB_CONTAINER_CASES_CLEANED.query_items(query=query,enable_cross_partition_query=True))
+        except Exception as e:
+            print(f"Error querying cases-cleaned database: {e.status_code} - {e.message}")
+            return make_response({
+                'status code': f'{e.status_code}',
+                'message': f'{e.message}',
+            }, 500)
+
+        unique_cases = get_cases_with_highest_version(cases)
+        return make_response(list(unique_cases.values()), 200)
+
+api.add_resource(Cases, '/cases')
+api.add_resource(Case_by_case_num, '/cases/<string:case_num>')
+api.add_resource(Cases_by_period, '/cases/period')
 
 
 if __name__ == '__main__':

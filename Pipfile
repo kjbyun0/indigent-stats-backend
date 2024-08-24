@@ -7,6 +7,8 @@ name = "pypi"
 azure-cosmos = "*"
 python-dotenv = "*"
 flask = "*"
+flask-restful = "*"
+flask-cors = "*"
 
 [dev-packages]
 
