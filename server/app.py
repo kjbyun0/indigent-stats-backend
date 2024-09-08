@@ -1,5 +1,6 @@
 from flask import Flask, make_response, jsonify, request
 from flask_restful import Api, Resource
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from flask_cors import CORS
 from azure.cosmos import CosmosClient, exceptions, PartitionKey
 from dotenv import load_dotenv
@@ -13,7 +14,11 @@ api = Api(app)
 # Instantiate CORS
 CORS(app)
 
+jwt = JWTManager(app)
+
 load_dotenv()
+# secret key ran by secrets.token_hex(32)
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
 
 URL = os.getenv("URL")
 KEY = os.getenv("KEY")
@@ -40,8 +45,22 @@ def get_cases_with_highest_version(cases):
 def index():
     return '<h1>Project Server</h1>'
 
+class Login(Resource):
+    def post(self):
+        req = request.get_json()
+        client_id = req.get('client_id')
+        # Skipped cliend id validity check.
+        access_token = create_access_token(identity=client_id)
+        return make_response({
+           "access_token": access_token,
+        }, 200)
+
 class Cases(Resource):
+    @jwt_required()
     def get(self):
+        identity = get_jwt_identity()
+        # print(f'{identity}')
+
         try: 
             cases = list(COSMOSDB_CONTAINER_CASES_CLEANED.read_all_items())
         except Exception as e:
@@ -55,7 +74,11 @@ class Cases(Resource):
         return make_response(list(unique_cases.values()), 200)
 
 class Case_by_case_num(Resource):
+    @jwt_required()
     def get(self, case_num):
+        identity = get_jwt_identity()
+        # print(f'{identity}')
+
         try:
             query = f"SELECT * FROM c WHERE c.case_number = '{case_num}'"
             cases = list(COSMOSDB_CONTAINER_CASES_CLEANED.query_items(query=query,enable_cross_partition_query=True))
@@ -71,7 +94,11 @@ class Case_by_case_num(Resource):
 
 # Fetch URL: http://localhost:5555/cases/period?startDate=2020-01-05&endDate=2021-01-04
 class Cases_by_period(Resource):
+    @jwt_required()
     def get(self):
+        identity = get_jwt_identity()
+        # print(f'{identity}')
+
         start_date = request.args.get('startDate')
         end_date = request.args.get('endDate')
         print(f'start date: {start_date}, end date: {end_date}')
@@ -94,6 +121,7 @@ class Cases_by_period(Resource):
         unique_cases = get_cases_with_highest_version(cases)
         return make_response(list(unique_cases.values()), 200)
 
+api.add_resource(Login, '/login')
 api.add_resource(Cases, '/cases')
 api.add_resource(Case_by_case_num, '/cases/<string:case_num>')
 api.add_resource(Cases_by_period, '/cases/period')
